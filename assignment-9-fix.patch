@@ -1,0 +1,100 @@
+diff --git a/kernel/process.c b/kernel/process.c
+index dc882d3..07dc993 100644
+--- a/kernel/process.c
++++ b/kernel/process.c
+@@ -107,6 +107,7 @@ static struct Process *new_process(struct App *app)
+         // ((struct TrapFrame *)stack_pointer)->ss = (SEG_UDATA << 3) | DPL_USER;
+         ((struct TrapFrame *)stack_pointer)->rip = (uint64_t)app->entrypoint;
+         // ((struct TrapFrame *)stack_pointer)->rsp = (uint64_t)USERSTACK_TOP;
++        ((struct TrapFrame *)stack_pointer)->rsp = (uint64_t)stack_pointer;
+
+         process->tf = (struct TrapFrame *)stack_pointer;
+
+@@ -192,33 +193,33 @@ int wait_process(struct Process *process, int *status)
+         return -1;
+ }
+
+-static void make_app1_process(void)
++static void make_app1_process(char *appname)
+ {
+         struct App app = {0};
+         extern char _binary____apps_app1_start[];
+-        app_elf_parse(&app, "app1", _binary____apps_app1_start);
++        app_elf_parse(&app, appname, _binary____apps_app1_start);
+
+         memmove((void*)app.load_start, (void*)app.elf_program_start, app.program_size);
+
+         new_process(&app);
+ }
+
+-static void make_app2_process(void)
++static void make_app2_process(char *appname)
+ {
+         struct App app = {0};
+         extern char _binary____apps_app2_start[];
+-        app_elf_parse(&app, "app2", _binary____apps_app2_start);
++        app_elf_parse(&app, appname, _binary____apps_app2_start);
+
+         memmove((void*)app.load_start, (void*)app.elf_program_start, app.program_size);
+
+         new_process(&app);
+ }
+
+-static void make_app3_process(void)
++static void make_app3_process(char *appname)
+ {
+         struct App app = {0};
+         extern char _binary____apps_app3_start[];
+-        app_elf_parse(&app, "app3", _binary____apps_app3_start);
++        app_elf_parse(&app, appname, _binary____apps_app3_start);
+
+         memmove((void*)app.load_start, (void*)app.elf_program_start, app.program_size);
+
+@@ -227,16 +228,18 @@ static void make_app3_process(void)
+
+ void init_process(void)
+ {
+-        make_app1_process();
+-        make_app2_process();
+-        make_app3_process();
++        make_app1_process("app1");
++        make_app2_process("app2");
++        make_app3_process("app3");
+ }
+
+-static int i = 0;
+-
+ struct Process *scheduler_next_process(struct Process *prev_process)
+ {
+         // stub
++        if (prev_process && prev_process->state == RUNNING) {
++                prev_process->state = READY;
++        }
++
+         return &process_table[0];
+ }
+
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index b2493e4..f2b1863 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -11,8 +11,9 @@ static unsigned long long syscall(unsigned long long syscall_id,
+         return ret;
+ }
+
+-unsigned long long syscall_handler_internal(unsigned long long sp) {
++void syscall_handler_internal(unsigned long long sp) {
+         unsigned long long syscall_id = 0, arg1 = 0, arg2 = 0, arg3 = 0;
++        unsigned long long ret;
+         struct TrapFrame *tf = (struct TrapFrame *)sp;
+
+         // %rax is syscall id
+@@ -20,5 +21,7 @@ unsigned long long syscall_handler_internal(unsigned long long sp) {
+         // %rsi is arg2
+         // %rdx is arg3
+
+-        return syscall(syscall_id, arg1, arg2, arg3);
++        ret = syscall(syscall_id, arg1, arg2, arg3);
++
++        // %rax is return value
+ }
